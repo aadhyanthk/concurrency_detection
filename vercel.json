@@ -22,6 +22,11 @@
     },
     {
       "src": "/(.*)",
+      "dest": "src/dist/$1",
+      "check": true
+    },
+    {
+      "src": "/(.*)",
       "dest": "src/dist/index.html"
     }
   ]
