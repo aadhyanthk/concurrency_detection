@@ -1,0 +1,18 @@
+# Environment Variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Node / React (Future-proofing for the src folder)
+node_modules/
+build/
+dist/
+.DS_Store
+
+# Vercel
+.vercel/
