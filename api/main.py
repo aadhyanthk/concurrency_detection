@@ -156,6 +156,29 @@ async def simulate_unsafe_booking(seat_id: int, db: Session = Depends(get_db)):
 
     return {"success": True, "message": f"Seat {seat.seat_label} booked (Unsafely)"}
 
+# Add this to main.py before the simulate endpoints
+@app.post("/seats/{seat_id}/timeout")
+def timeout_seat(seat_id: int, db: Session = Depends(get_db)):
+    """
+    Simulates an immediate timeout by resetting status and clearing expiry.
+    """
+    # Use with_for_update to ensure we have exclusive access during the reset
+    seat = db.query(Seat).with_for_update().filter(Seat.id == seat_id).first()
+    
+    if not seat or seat.status != "HELD":
+        raise HTTPException(status_code=400, detail="Seat is not currently held.")
+
+    # Explicitly revert the status so the frontend sees it as AVAILABLE (gray)
+    
+    seat.status = "AVAILABLE"
+    seat.hold_expiry = None 
+    # Optional: Increment version to show the record was modified
+    seat.version += 1 
+    
+    db.commit()
+    
+    return {"message": "Seat released and backend TTL reset."}
+
 @app.post("/simulate/optimistic/{seat_id}")
 async def simulate_optimistic_booking(seat_id: int, db: Session = Depends(get_db)):
     """

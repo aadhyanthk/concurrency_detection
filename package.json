@@ -2,10 +2,9 @@
   "name": "concur-detec",
   "version": "1.0.0",
   "scripts": {
-    "build": "cd src && npm install && npm run build",
-    "install": "cd src && npm install"
-  },
-  "dependencies": {
-    "lucide-react": "^0.576.0"
+    "frontend-install": "cd src && npm install",
+    "frontend-dev": "cd src && npm run dev",
+    "backend-dev": "uvicorn api.main:app --reload",
+    "build": "cd src && npm install && npm run build"
   }
 }
