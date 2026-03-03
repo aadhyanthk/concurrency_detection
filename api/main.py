@@ -1,4 +1,5 @@
 import os
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
@@ -132,3 +133,64 @@ def book_seat(seat_id: int, db: Session = Depends(get_db)):
     
     db.rollback()
     raise HTTPException(status_code=400, detail="Hold expired or seat unavailable")
+
+@app.post("/simulate/unsafe/{seat_id}")
+async def simulate_unsafe_booking(seat_id: int, db: Session = Depends(get_db)):
+    """
+    DELIBERATELY UNSAFE: Demonstrates a race condition.
+    No locking is used, allowing double-bookings to occur.
+    """
+    # 1. Fetch the seat status (Read)
+    seat = db.query(Seat).filter(Seat.id == seat_id).first()
+
+    if not seat or seat.status != "AVAILABLE":
+        return {"success": False, "message": "Seat already taken (Detected at Read)"}
+
+    # 2. Artificial Delay
+    # This creates a window where another thread can read the same "AVAILABLE" state.
+    await asyncio.sleep(0.5) 
+
+    # 3. Update the seat (Write)
+    seat.status = "BOOKED"
+    db.commit()
+
+    return {"success": True, "message": f"Seat {seat.seat_label} booked (Unsafely)"}
+
+@app.post("/simulate/optimistic/{seat_id}")
+async def simulate_optimistic_booking(seat_id: int, db: Session = Depends(get_db)):
+    """
+    OPTIMISTIC LOCKING: Uses the version column to detect concurrent changes.
+    High performance, but users will see "Conflict" errors under heavy load.
+    """
+    # 1. Read current state and version
+    seat = db.query(Seat).filter(Seat.id == seat_id).first()
+
+    if not seat or seat.status != "AVAILABLE":
+        return {"success": False, "message": "Seat already taken (Detected at Read)"}
+
+    current_version = seat.version
+
+    # 2. Artificial Delay (Simulating work/lag)
+    await asyncio.sleep(0.5)
+
+    # 3. Targeted Update (The 'Version Check')
+    # We update ONLY if the version hasn't changed since we read it.
+    result = db.query(Seat).filter(
+        Seat.id == seat_id, 
+        Seat.version == current_version
+    ).update({
+        "status": "BOOKED",
+        "version": Seat.version + 1 # Increment version for the next person
+    })
+
+    db.commit()
+
+    if result == 0:
+        # result == 0 means no row matched the ID + Version combo.
+        # This implies someone else changed the row while we were sleeping.
+        return {
+            "success": False, 
+            "message": "Concurrency Conflict: Someone else booked this seat first!"
+        }
+
+    return {"success": True, "message": f"Seat {seat.seat_label} booked (Optimistically)"}

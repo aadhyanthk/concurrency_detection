@@ -1,0 +1,11 @@
+{
+  "name": "concur-detec",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd src && npm install && npm run build",
+    "install": "cd src && npm install"
+  },
+  "dependencies": {
+    "lucide-react": "^0.576.0"
+  }
+}
