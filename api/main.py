@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from datetime import timedelta
 
 # Load environment variables
 load_dotenv()
@@ -81,3 +82,53 @@ def seed_theatre(db: Session = Depends(get_db)):
 @app.get("/seats")
 def get_seats(db: Session = Depends(get_db)):
     return db.query(Seat).order_by(Seat.id).all()
+
+@app.post("/seats/{seat_id}/hold")
+def hold_seat(seat_id: int, db: Session = Depends(get_db)):
+    """
+    Attempts to put a 2-minute hold on a seat.
+    Uses pessimistic locking to prevent race conditions during the hold phase.
+    """
+    # 1. Start a transaction and lock the row
+    # 'with_for_update' tells Postgres: "I am modifying this, nobody else touch it yet."
+    seat = db.query(Seat).with_for_update().filter(Seat.id == seat_id).first()
+
+    if not seat:
+        raise HTTPException(status_code=404, detail="Seat not found")
+
+    now = datetime.utcnow()
+
+    # 2. Check if the seat is actually available
+    # A seat is available if status is 'AVAILABLE' OR if the hold has expired
+    is_expired = seat.hold_expiry and now > seat.hold_expiry
+    
+    if seat.status == "AVAILABLE" or (seat.status == "HELD" and is_expired):
+        # 3. Apply the hold
+        seat.status = "HELD"
+        seat.hold_expiry = now + timedelta(minutes=2)
+        db.commit()
+        return {
+            "message": f"Seat {seat.seat_label} is now held for 2 minutes",
+            "expiry": seat.hold_expiry
+        }
+    else:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Seat is already taken or held by someone else")
+
+@app.post("/seats/{seat_id}/book")
+def book_seat(seat_id: int, db: Session = Depends(get_db)):
+    """
+    Finalizes the booking. Only works if the seat is currently HELD and not expired.
+    """
+    seat = db.query(Seat).with_for_update().filter(Seat.id == seat_id).first()
+    
+    now = datetime.utcnow()
+    
+    if seat and seat.status == "HELD" and now <= seat.hold_expiry:
+        seat.status = "BOOKED"
+        seat.hold_expiry = None # Clear expiry once fully booked
+        db.commit()
+        return {"message": f"Seat {seat.seat_label} booked successfully"}
+    
+    db.rollback()
+    raise HTTPException(status_code=400, detail="Hold expired or seat unavailable")
