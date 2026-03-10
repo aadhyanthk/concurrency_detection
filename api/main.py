@@ -45,11 +45,11 @@ def startup_event():
     
     Base.metadata.create_all(bind=engine)
 
-@app.get("/")
+@app.get("/api/")
 def read_root():
     return {"status": "Online", "database": "Connected"}
 
-@app.post("/seed")
+@app.post("/api/seed")
 def seed_theatre(db: Session = Depends(get_db)):
     """Initializes or Resets 100 seats to AVAILABLE status."""
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
@@ -80,11 +80,11 @@ def seed_theatre(db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Theatre grid initialized successfully", "total_seats": 100}
 
-@app.get("/seats")
+@app.get("/api/seats")
 def get_seats(db: Session = Depends(get_db)):
     return db.query(Seat).order_by(Seat.id).all()
 
-@app.post("/seats/{seat_id}/hold")
+@app.post("/api/seats/{seat_id}/hold")
 def hold_seat(seat_id: int, db: Session = Depends(get_db)):
     """
     Attempts to put a 2-minute hold on a seat.
@@ -116,7 +116,7 @@ def hold_seat(seat_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="Seat is already taken or held by someone else")
 
-@app.post("/seats/{seat_id}/book")
+@app.post("/api/seats/{seat_id}/book")
 def book_seat(seat_id: int, db: Session = Depends(get_db)):
     """
     Finalizes the booking. Only works if the seat is currently HELD and not expired.
@@ -134,7 +134,7 @@ def book_seat(seat_id: int, db: Session = Depends(get_db)):
     db.rollback()
     raise HTTPException(status_code=400, detail="Hold expired or seat unavailable")
 
-@app.post("/simulate/unsafe/{seat_id}")
+@app.post("/api/simulate/unsafe/{seat_id}")
 async def simulate_unsafe_booking(seat_id: int, db: Session = Depends(get_db)):
     """
     DELIBERATELY UNSAFE: Demonstrates a race condition.
@@ -157,7 +157,7 @@ async def simulate_unsafe_booking(seat_id: int, db: Session = Depends(get_db)):
     return {"success": True, "message": f"Seat {seat.seat_label} booked (Unsafely)"}
 
 # Add this to main.py before the simulate endpoints
-@app.post("/seats/{seat_id}/timeout")
+@app.post("/api/seats/{seat_id}/timeout")
 def timeout_seat(seat_id: int, db: Session = Depends(get_db)):
     """
     Simulates an immediate timeout by resetting status and clearing expiry.
@@ -179,7 +179,7 @@ def timeout_seat(seat_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Seat released and backend TTL reset."}
 
-@app.post("/simulate/optimistic/{seat_id}")
+@app.post("/api/simulate/optimistic/{seat_id}")
 async def simulate_optimistic_booking(seat_id: int, db: Session = Depends(get_db)):
     """
     OPTIMISTIC LOCKING: Uses the version column to detect concurrent changes.
